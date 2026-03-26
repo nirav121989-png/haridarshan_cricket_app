@@ -1,0 +1,183 @@
+:root {
+  /* LIGHT THEME (Default) */
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-muted: #f1f1f4;
+  --primary: #0066ff;
+  --primary-glow: rgba(0, 102, 255, 0.1);
+  --secondary: #10b981;
+  --secondary-glow: rgba(16, 185, 129, 0.1);
+  --danger: #ff3b30;
+  --text-main: #1d1d1f;
+  --text-muted: #86868b;
+  --border-color: #efeff4;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
+  --glass-bg: rgba(255, 255, 255, 0.85);
+}
+
+.dark-mode {
+  /* DARK THEME */
+  --background: #000000;
+  --surface: #1c1c1e;
+  --surface-muted: #2c2c2e;
+  --primary: #0a84ff;
+  --primary-glow: rgba(10, 132, 255, 0.2);
+  --secondary: #30d158;
+  --secondary-glow: rgba(48, 209, 88, 0.2);
+  --danger: #ff453a;
+  --text-main: #ffffff;
+  --text-muted: #8e8e93;
+  --border-color: #38383a;
+  --shadow-sm: 0 4px 12px rgba(0,0,0,0.4);
+  --glass-bg: rgba(28, 28, 30, 0.85);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--background);
+  color: var(--text-main);
+  line-height: 1.4;
+  font-size: 14px;
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+#root {
+  max-width: 440px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background-color: var(--background);
+  position: relative;
+}
+
+/* Base UI Components */
+.container { padding: 16px; }
+.flex { display: flex; }
+.flex-col { display: flex; flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.justify-center { justify-content: center; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; }
+.w-full { width: 100%; }
+.flex-1 { flex: 1; }
+
+.card {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.header-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  padding: 12px 16px;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  font-weight: 600;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn:active { transform: scale(0.97); opacity: 0.8; }
+
+.btn-primary { background: var(--primary); color: white; }
+.btn-secondary { background: var(--secondary); color: white; }
+.btn-danger { background: var(--danger); color: white; }
+.btn-surface { background: var(--surface-muted); color: var(--text-main); border: 1px solid var(--border-color); }
+.btn-outline { background: transparent; color: var(--primary); border: 1px solid var(--primary); }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+
+/* Inputs */
+.input {
+  width: 100%;
+  padding: 12px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-size: 14px;
+  outline: none;
+}
+
+.label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+}
+
+/* Scoring Grid */
+.scoring-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.score-num-btn {
+  height: 54px;
+  font-size: 18px;
+  border-radius: 12px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bowler-active {
+  border: 2px solid var(--secondary) !important;
+  background-color: var(--secondary-glow) !important;
+  box-shadow: 0 0 15px var(--secondary-glow);
+}
+
+.striker-active {
+  border: 2px solid var(--primary) !important;
+  background-color: var(--primary-glow) !important;
+  box-shadow: 0 0 15px var(--primary-glow);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 10px; }
+
+/* Branding */
+.branding-title {
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 900;
+}
