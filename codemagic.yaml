@@ -15,8 +15,14 @@ workflows:
         script: |
           npx cap add ios || true
           npx cap sync ios
-      - name: Build IPA
+      - name: Build Unsigned IPA
         script: |
-          xcode-project build-ipa --workspace ios/App/App.xcworkspace --scheme App
+          # Build the archive
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -sdk iphoneos -configuration Release -archivePath $CM_BUILD_DIR/App.xcarchive archive
+          
+          # Create IPA via Payload method (Perfect for AltStore/Sideloading)
+          mkdir -p build/ios/ipa/Payload
+          cp -r $CM_BUILD_DIR/App.xcarchive/Products/Applications/App.app build/ios/ipa/Payload
+          cd build/ios/ipa && zip -r HaridarshanCricket.ipa Payload
     artifacts:
       - build/ios/ipa/*.ipa
