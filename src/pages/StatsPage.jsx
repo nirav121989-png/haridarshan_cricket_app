@@ -19,10 +19,11 @@ export default function StatsPage() {
   
   const matchStatsToRender = useMemo(() => {
       if (!selectedMatch) return null;
-      if (selectedMatch.stats) return selectedMatch.stats;
       try {
+          // Always recalculate on the fly so point system changes reflect immediately
           return useAppStore.getState().calculateMatchStats(selectedMatch);
       } catch (e) {
+          console.error("Match stats calc error:", e);
           return { mvp: [], worst: [] }; // safe fallback
       }
   }, [selectedMatch]);
@@ -41,18 +42,22 @@ export default function StatsPage() {
          statsMap[p.id] = { id: p.id, name: p.name, runs: 0, wickets: 0, matches: 0, points: 0 };
      });
 
-     const targetMatches = viewType === 'series' 
-        ? matches.filter(m => m.seriesId === activeSeriesId) 
-        : matches;
+      // Filter out matches marked as 'isDiscarded' from the aggregated stats calculation.
+      // This ensures that only valid, non-discarded matches contribute to series and overall statistics.
+      const targetMatches = viewType === 'series' 
+         ? matches.filter(m => m.seriesId === activeSeriesId && !m.isDiscarded) 
+         : matches.filter(m => !m.isDiscarded);
 
-     targetMatches.forEach(m => {
+      targetMatches.forEach(m => {
          const matchPlayers = new Set();
          m.innings.forEach(inn => {
              Object.entries(inn.battingState || {}).forEach(([pid, s]) => {
                  if (s.balls > 0 || s.status !== 'yet_to_bat') {
                      if (!statsMap[pid]) statsMap[pid] = { id: pid, name: 'Unknown', runs: 0, wickets: 0, matches: 0, points: 0 };
                      statsMap[pid].runs += s.runs;
-                     statsMap[pid].points += s.runs;
+                     // Safe math for older records without fours/sixes
+                     const bPts = (s.runs || 0) + ((s.fours || 0) * 1) + ((s.sixes || 0) * 3);
+                     statsMap[pid].points += bPts;
                      matchPlayers.add(pid);
                  }
              });
@@ -60,8 +65,18 @@ export default function StatsPage() {
                  if (s.balls > 0) {
                      if (!statsMap[pid]) statsMap[pid] = { id: pid, name: 'Unknown', runs: 0, wickets: 0, matches: 0, points: 0 };
                      statsMap[pid].wickets += s.wickets;
-                     statsMap[pid].points += (s.wickets * 20) - s.runsGiven;
+                     // 15 per wicket
+                     statsMap[pid].points += (s.wickets * 15);
                      matchPlayers.add(pid);
+                 }
+             });
+             (inn.ballLog || []).forEach(ball => {
+                 if (ball.isWicket && ball.fielderId) {
+                     const fPid = ball.fielderId;
+                     if (!statsMap[fPid]) statsMap[fPid] = { id: fPid, name: 'Unknown', runs: 0, wickets: 0, matches: 0, points: 0 };
+                     const fPts = (ball.wicketType === 'runout') ? 10 : 5;
+                     statsMap[fPid].points += fPts;
+                     matchPlayers.add(fPid);
                  }
              });
          });

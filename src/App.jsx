@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
-import { Home, Play, UserPlus, Users, BarChart3, Star, ScrollText, Sun, Moon, Trophy, Settings } from 'lucide-react';
+import { Home, Play, UserPlus, Users, BarChart3, Star, ScrollText, Sun, Moon, Trophy, Settings, HelpCircle, Info } from 'lucide-react';
 import { useAppStore } from './store';
 import './index.css';
 
@@ -17,6 +17,7 @@ function HomePage() {
   const navigate = useNavigate();
   const { activeSeriesId, matches, activeMatch, endSeries, darkMode, toggleDarkMode, weeklyTeams } = useAppStore();
   const [confirmAction, setConfirmAction] = React.useState(null);
+  const [showPointsInfo, setShowPointsInfo] = React.useState(false);
 
   const seriesScores = useMemo(() => {
     if (!activeSeriesId) return null;
@@ -44,6 +45,9 @@ function HomePage() {
               <p style={{ margin: 0, fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: '900', letterSpacing: '0.2em' }}>CRICKET SCORER</p>
             </div>
             <div className="flex gap-2">
+                <button className="btn btn-surface" style={{ padding: '8px' }} onClick={() => setShowPointsInfo(true)}>
+                    <HelpCircle size={16} color="var(--primary)" />
+                </button>
                 <button className="btn btn-surface" style={{ padding: '8px' }} onClick={() => navigate('/system')}>
                     <Settings size={16} color="var(--text-muted)" />
                 </button>
@@ -166,6 +170,58 @@ function HomePage() {
                        <button className="btn btn-surface flex-1 p-4" style={{ fontWeight: '800' }} onClick={() => setConfirmAction(null)}>CANCEL</button>
                        <button className="btn flex-1 p-4" style={{ fontWeight: '800', background: 'var(--danger)', color: '#fff', boxShadow: '0 4px 15px var(--danger-glow)' }} onClick={() => { confirmAction.act(); setConfirmAction(null); }}>PROCEED</button>
                    </div>
+               </div>
+           </div>
+        )}
+
+        {/* MVP POINT SYSTEM INFO MODAL */}
+        {showPointsInfo && (
+           <div className="glass flex items-center justify-center p-6" style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.9)' }}>
+               <div className="card w-full flex-col gap-4 p-6" style={{ background: 'var(--surface)', border: '1px solid var(--border-color)', maxHeight: '80vh', overflowY: 'auto' }}>
+                   <div className="flex justify-between items-center mb-2">
+                       <h3 style={{ fontSize: '1.2rem', fontWeight: '900', color: 'var(--primary)' }}>MVP POINT SYSTEM</h3>
+                       <button className="btn btn-surface btn-sm" onClick={() => setShowPointsInfo(false)}>✕</button>
+                   </div>
+                   
+                   <div className="flex-col gap-4">
+                       <section className="flex-col gap-2 p-4" style={{ background: 'var(--surface-muted)', borderRadius: '12px' }}>
+                           <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: '900' }}>🏏 BATTING</h4>
+                           <div className="flex justify-between items-center" style={{ fontSize: '0.75rem', fontWeight: '700' }}>
+                               <span>Every 1 Run</span>
+                               <span style={{ color: 'var(--primary)' }}>+1 Pt</span>
+                           </div>
+                           <div className="flex justify-between items-center" style={{ fontSize: '0.75rem', fontWeight: '700' }}>
+                               <span>Boundary (4)</span>
+                               <span style={{ color: 'var(--primary)' }}>+1 Pt Bonus</span>
+                           </div>
+                           <div className="flex justify-between items-center" style={{ fontSize: '0.75rem', fontWeight: '700' }}>
+                               <span>Maximum (6)</span>
+                               <span style={{ color: 'var(--primary)' }}>+3 Pt Bonus</span>
+                           </div>
+                       </section>
+
+                       <section className="flex-col gap-2 p-4" style={{ background: 'var(--surface-muted)', borderRadius: '12px' }}>
+                           <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--secondary)', fontWeight: '900' }}>🥎 BOWLING</h4>
+                           <div className="flex justify-between items-center" style={{ fontSize: '0.75rem', fontWeight: '700' }}>
+                               <span>Every Wicket</span>
+                               <span style={{ color: 'var(--secondary)' }}>+15 Pts</span>
+                           </div>
+                       </section>
+
+                       <section className="flex-col gap-2 p-4" style={{ background: 'var(--surface-muted)', borderRadius: '12px' }}>
+                           <h4 style={{ margin: 0, fontSize: '0.85rem', color: '#fbbf24', fontWeight: '900' }}>🧤 FIELDING</h4>
+                           <div className="flex justify-between items-center" style={{ fontSize: '0.75rem', fontWeight: '700' }}>
+                               <span>Catch / Stumping</span>
+                               <span style={{ color: '#fbbf24' }}>+5 Pts</span>
+                           </div>
+                           <div className="flex justify-between items-center" style={{ fontSize: '0.75rem', fontWeight: '700' }}>
+                               <span>Run Out</span>
+                               <span style={{ color: '#fbbf24' }}>+10 Pts</span>
+                           </div>
+                       </section>
+                   </div>
+
+                   <button className="btn btn-primary w-full p-4 mt-2" style={{ fontWeight: '800' }} onClick={() => setShowPointsInfo(false)}>GOT IT!</button>
                </div>
            </div>
         )}

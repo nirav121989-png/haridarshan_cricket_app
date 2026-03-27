@@ -91,7 +91,9 @@ export default function ScorecardPage() {
                    <th style={{ padding: '8px 0', textTransform: 'uppercase' }}>BATSMAN</th>
                    <th style={{ textAlign: 'center', width: '30px' }}>R</th>
                    <th style={{ textAlign: 'center', width: '30px' }}>B</th>
-                   <th style={{ textAlign: 'right', width: '40px' }}>SR</th>
+                   <th style={{ textAlign: 'center', width: '25px' }}>4s</th>
+                   <th style={{ textAlign: 'center', width: '25px' }}>6s</th>
+                   <th style={{ textAlign: 'right', width: '35px' }}>SR</th>
                  </tr>
                </thead>
                <tbody>
@@ -118,6 +120,8 @@ export default function ScorecardPage() {
                          </td>
                          <td style={{ textAlign: 'center', fontWeight: '800', color: 'var(--primary)' }}>{stats.runs}</td>
                          <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{stats.balls}</td>
+                         <td style={{ textAlign: 'center', color: 'var(--text-main)', fontSize: '0.7rem' }}>{stats.fours || 0}</td>
+                         <td style={{ textAlign: 'center', color: 'var(--text-main)', fontSize: '0.7rem' }}>{stats.sixes || 0}</td>
                          <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: '0.7rem' }}>{sr}</td>
                        </tr>
                     )

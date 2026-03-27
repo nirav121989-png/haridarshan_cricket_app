@@ -1,16 +1,23 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store';
-import { ArrowLeft, Trash2, Download, Upload, ShieldAlert, FileJson, Database, Save, HardDrive } from 'lucide-react';
+import { ArrowLeft, Trash2, Download, Upload, ShieldAlert, FileJson, Database, Save, HardDrive, RefreshCw, TrendingDown } from 'lucide-react';
 
 export default function SystemPage() {
   const navigate = useNavigate();
   const { resetAllData, importFullState, players, matches, weeklyTeams, activeSeriesId } = useAppStore();
   const [password, setPassword] = useState('');
+  const [resumePassword, setResumePassword] = useState('');
   const [isResetting, setIsResetting] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
   const [importStatus, setImportStatus] = useState('');
   const [confirmAction, setConfirmAction] = useState(null);
   const fileInputRef = React.useRef(null);
+
+  const lastMatchToday = useMemo(() => {
+    const today = new Date().toDateString();
+    return [...matches].reverse().find(m => m.finishedAt && new Date(m.finishedAt).toDateString() === today);
+  }, [matches]);
 
   const dbSize = useMemo(() => {
     try {
@@ -141,6 +148,62 @@ export default function SystemPage() {
             </button>
             <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} style={{ display: 'none' }} />
         </div>
+
+        {/* Sync Stats Section */}
+        <div className="card flex-col gap-4" style={{ background: 'var(--primary-glow)', border: '1px solid var(--primary)' }}>
+            <div className="flex items-center gap-2 mb-1 pb-1" style={{ borderBottom: '1px solid var(--primary)' }}>
+                <TrendingDown size={18} color="var(--primary)" style={{ transform: 'rotate(180deg)' }} />
+                <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '800', color: 'var(--primary)' }}>RE-CALCULATE ALL MATCHES</h3>
+            </div>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-main)', fontWeight: '700' }}>
+               Apply new point rules (Catches, Stumpings, Run Outs, 4s/6s Bonuses) to all previously played matches.
+            </p>
+            <button className="btn btn-primary w-full p-4" onClick={() => {
+                useAppStore.getState().recalculateAllMatchStats();
+                setImportStatus('✅ All match points recalculated successfully!');
+            }}>
+                REFRESH & SYNC ALL STATS
+            </button>
+        </div>
+
+        <div style={{ height: '24px' }}></div>
+        {lastMatchToday && (
+            <div className="card flex-col gap-4" style={{ borderColor: 'var(--secondary)', background: 'var(--secondary-glow)' }}>
+                <div className="flex items-center gap-2 mb-1 pb-1" style={{ borderBottom: '1px solid var(--secondary)' }}>
+                    <RefreshCw size={18} color="var(--secondary)" />
+                    <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '800', color: 'var(--secondary)' }}>RESUME LAST MATCH</h3>
+                </div>
+                {!isResuming ? (
+                    <button className="btn btn-secondary w-full p-4" onClick={() => setIsResuming(true)} style={{ borderRadius: '12px' }}>
+                       RESUME LAST MATCH (TODAY)
+                    </button>
+                ) : (
+                    <div className="flex-col gap-3">
+                        <label className="label" style={{ color: 'var(--secondary)' }}>ENTER ADMIN PASSWORD</label>
+                        <input 
+                            className="input" 
+                            type="password" 
+                            placeholder="••••••" 
+                            style={{ background: 'var(--surface)', borderColor: 'var(--secondary)' }}
+                            value={resumePassword}
+                            onChange={(e) => setResumePassword(e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                            <button className="btn btn-secondary flex-1" style={{ fontWeight: '800' }} onClick={() => {
+                                if (resumePassword === 'server') {
+                                    useAppStore.getState().resumePreviousMatch(lastMatchToday.id);
+                                    setImportStatus('✅ Match Resumed. Redirecting...');
+                                    setTimeout(() => navigate('/score'), 1000);
+                                } else {
+                                    setImportStatus('❌ Incorrect password.');
+                                }
+                            }}>RESUME</button>
+                            <button className="btn btn-surface flex-1" onClick={() => setIsResuming(false)}>CANCEL</button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
 
         {/* Danger Zone */}
         <div className="card flex-col gap-4" style={{ borderColor: 'var(--danger)', background: 'var(--danger-glow)' }}>

@@ -173,6 +173,25 @@ export const useAppStore = create(
          return { activeMatch: null };
       }),
 
+      recalculateAllMatchStats: () => set((state) => {
+          const updatedMatches = state.matches.map(m => {
+              const newStats = get().calculateMatchStats(m);
+              return { ...m, stats: newStats };
+          });
+          return { matches: updatedMatches };
+      }),
+
+      resumePreviousMatch: (matchId) => set((state) => {
+          const matchToResume = state.matches.find(m => m.id === matchId);
+          if (!matchToResume) return state;
+          
+          return {
+              activeMatch: { ...matchToResume, matchEnded: false, inningEnded: false },
+              matches: state.matches.filter(m => m.id !== matchId),
+              undoStack: []
+          };
+      }),
+
       restartMatch: () => set((state) => {
           if (!state.activeMatch) return state;
           const matchInfo = {
@@ -194,6 +213,11 @@ export const useAppStore = create(
               activeMatch: prevMatch,
               undoStack: state.undoStack.slice(0, -1)
           };
+      }),
+
+      updateMatchConfig: (newConfig) => set((state) => {
+          if (!state.activeMatch) return state;
+          return { activeMatch: { ...state.activeMatch, config: { ...state.activeMatch.config, ...newConfig } } };
       }),
       
       setActivePlayers: (updates) => set((state) => {
@@ -246,6 +270,7 @@ export const useAppStore = create(
                     runsAtStart: inning.runs,
                     wicketsAtStart: inning.wickets,
                     ballsAtStart: inning.balls,
+                    logIdxAtStart: (inning.ballLog || []).length,
                     runsAtEnd: inning.runs,
                     wicketsAtEnd: inning.wickets,
                     ballsAtEnd: inning.balls
@@ -259,6 +284,98 @@ export const useAppStore = create(
            activeMatch: match,
            undoStack: [...state.undoStack, oldStateStr].slice(-20)
          };
+      }),
+
+      addPlayerToTeamMidMatch: (teamKey, playerId) => set((state) => {
+          if (!playerId) return state;
+          
+          const newTeams = { ...state.weeklyTeams };
+          if (newTeams[teamKey].playerIds.includes(playerId)) return state;
+          
+          newTeams[teamKey].playerIds = [...newTeams[teamKey].playerIds, playerId];
+          
+          if (!state.activeMatch) return { weeklyTeams: newTeams };
+
+          const match = { ...state.activeMatch };
+          
+          // Update both innings for the new player
+          match.innings = match.innings.map((inning, idx) => {
+              const belongsToInningBatting = inning.team === teamKey;
+              const belongsToInningBowling = inning.team !== teamKey;
+              
+              const newBattingState = { ...inning.battingState };
+              const newBowlingState = { ...inning.bowlingState };
+              
+              if (belongsToInningBatting && !newBattingState[playerId]) {
+                  newBattingState[playerId] = { runs: 0, balls: 0, fours: 0, sixes: 0, status: 'yet_to_bat' };
+              }
+              if (belongsToInningBowling && !newBowlingState[playerId]) {
+                  newBowlingState[playerId] = { balls: 0, runsGiven: 0, wickets: 0, wides: 0, noBalls: 0, isCompleted: false };
+              }
+              
+              return { ...inning, battingState: newBattingState, bowlingState: newBowlingState };
+          });
+
+          return { weeklyTeams: newTeams, activeMatch: match };
+      }),
+
+      removePlayerFromTeamMidMatch: (teamKey, playerId) => set((state) => {
+          const newTeams = { ...state.weeklyTeams };
+          newTeams[teamKey].playerIds = newTeams[teamKey].playerIds.filter(id => id !== playerId);
+          
+          if (!state.activeMatch) return { weeklyTeams: newTeams };
+          
+          const match = { ...state.activeMatch };
+          if (match.strikerId === playerId) match.strikerId = null;
+          if (match.nonStrikerId === playerId) match.nonStrikerId = null;
+          if (match.bowler1Id === playerId) match.bowler1Id = null;
+          if (match.bowler2Id === playerId) match.bowler2Id = null;
+          if (match.currentBowlerId === playerId) match.currentBowlerId = null;
+          
+          return { weeklyTeams: newTeams, activeMatch: match };
+      }),
+
+      revivePlayer: (playerId) => set((state) => {
+          if (!state.activeMatch) return state;
+          const oldStateStr = JSON.stringify(state.activeMatch);
+          const match = { ...state.activeMatch };
+          const inning = { ...match.innings[match.currentInning] };
+          
+          // Find the wicket ball for this player
+          const wicketBallIndex = inning.ballLog.findIndex(b => b.strikerId === playerId && b.isWicket);
+          if (wicketBallIndex === -1 && inning.battingState[playerId]?.status !== 'out') return state;
+
+          const wicketBall = inning.ballLog[wicketBallIndex];
+          
+          // Decrement wicket counts
+          inning.wickets = Math.max(0, inning.wickets - 1);
+          if (wicketBall && wicketBall.bowlerId && inning.bowlingState[wicketBall.bowlerId]) {
+              // Only decrement if it wasn't a runout (since runouts don't give wickets to bowlers usually in our logic)
+              if (wicketBall.wicketType !== 'runout') {
+                  inning.bowlingState[wicketBall.bowlerId].wickets = Math.max(0, inning.bowlingState[wicketBall.bowlerId].wickets - 1);
+              }
+          }
+
+          // Restore batsman state
+          if (inning.battingState[playerId]) {
+              inning.battingState[playerId].status = 'yet_to_bat'; // handleSelect will set it to 'batting'
+              delete inning.battingState[playerId].howOut;
+              delete inning.battingState[playerId].outBowlerId;
+              delete inning.battingState[playerId].outFielderId;
+          }
+
+          // Remove the wicket status from the ball log entry
+          if (wicketBallIndex !== -1) {
+              inning.ballLog[wicketBallIndex].isWicket = false;
+              inning.ballLog[wicketBallIndex].wicketType = null;
+              inning.ballLog[wicketBallIndex].fielderId = null;
+          }
+
+          match.innings[match.currentInning] = inning;
+          return {
+              activeMatch: match,
+              undoStack: [...state.undoStack, oldStateStr].slice(-20)
+          };
       }),
 
       retireBatsman: (batsmanId, isOut = false) => set((state) => {
@@ -278,10 +395,6 @@ export const useAppStore = create(
          if (isOut) {
              inning.wickets += 1;
              inning.ballLog.push({ runs: 0, isWide: false, isNoBall: false, isWicket: true, wicketType: 'retired_out', fielderId: null, bowlerId: match.currentBowlerId, strikerId: batsmanId });
-             if (inning.wickets >= 10) {
-                 match.inningEnded = true;
-                 if (match.currentInning === 1) match.matchEnded = true;
-             }
          }
 
          if (match.strikerId === batsmanId) match.strikerId = null;
@@ -294,6 +407,36 @@ export const useAppStore = create(
              undoStack: [...state.undoStack, oldStateStr].slice(-20)
          };
       }),
+
+      endCurrentInning: () => set((state) => {
+          if (!state.activeMatch || state.activeMatch.inningEnded) return state;
+          const oldStateStr = JSON.stringify(state.activeMatch);
+          const match = { ...state.activeMatch, inningEnded: true };
+          if (match.currentInning === 1) match.matchEnded = true;
+          return { 
+              activeMatch: match,
+              undoStack: [...state.undoStack, oldStateStr].slice(-20)
+          };
+       }),
+
+       declareMatchOutcome: ({ outcome, winnerId }) => set((state) => {
+          if (!state.activeMatch) return state;
+          
+          const match = { 
+              ...state.activeMatch, 
+              matchEnded: true, 
+              matchOutcome: outcome, // 'win', 'abandoned', 'tie', 'cancelled'
+              winnerId: winnerId || null,
+              isDiscarded: (outcome === 'cancelled' || outcome === 'abandoned'),
+              endTime: Date.now()
+          };
+          
+          return {
+              activeMatch: null,
+              matches: [...state.matches, match],
+              undoStack: []
+          };
+       }),
 
       swapStrike: () => set((state) => {
         if (!state.activeMatch || !state.activeMatch.strikerId || !state.activeMatch.nonStrikerId) return state;
@@ -329,7 +472,7 @@ export const useAppStore = create(
         }
       }),
 
-      addScore: ({ runs, isWide, isNoBall, isWicket, wicketType = null, fielderId = null }) => set((state) => {
+      addScore: ({ runs, isWide, isNoBall, isWicket, wicketType = null, fielderId = null, outPlayerId = null }) => set((state) => {
          if (!state.activeMatch || !state.activeMatch.strikerId || !state.activeMatch.currentBowlerId) return state;
          
          const oldStateStr = JSON.stringify(state.activeMatch);
@@ -341,6 +484,9 @@ export const useAppStore = create(
          
          const sId = match.strikerId;
          const bId = match.currentBowlerId;
+         
+         // In a runout, we might specify outPlayerId. Otherwise, it defaults to the striker.
+         const targetOutId = outPlayerId || sId;
 
          let totalBallRuns = runs;
          if (isWide || isNoBall) totalBallRuns += 1;
@@ -348,11 +494,17 @@ export const useAppStore = create(
          inning.runs += totalBallRuns;
          if (isWide || isNoBall) inning.extras += 1;
          
-         if (!isWide && bs[sId]) bs[sId].balls += 1;
-         if (bs[sId]) {
+         const isEffectivelyAWicket = isWicket && (wicketType !== 'runout' || !isWide);
+
+         if (!isWide && bs[sId]) {
+             bs[sId].balls += 1;
+             // Only give runs to batsman if it's NOT a wide
              bs[sId].runs += runs;
              if (runs === 4) bs[sId].fours += 1;
              if (runs === 6) bs[sId].sixes += 1;
+         } else if (isWide) {
+             // In a wide, any "runs" are actually byes (extras)
+             inning.extras += runs;
          }
 
          if (bws[bId]) {
@@ -369,13 +521,14 @@ export const useAppStore = create(
 
          if (isWicket) {
              inning.wickets += 1;
-             if (bs[sId]) {
-                 bs[sId].status = 'out';
-                 bs[sId].howOut = wicketType;
-                 bs[sId].outBowlerId = bId;
-                 bs[sId].outFielderId = fielderId;
+             if (bs[targetOutId]) {
+                 bs[targetOutId].status = 'out';
+                 bs[targetOutId].howOut = wicketType;
+                 bs[targetOutId].outBowlerId = bId;
+                 bs[targetOutId].outFielderId = fielderId;
              }
-             match.strikerId = null;
+             if (match.strikerId === targetOutId) match.strikerId = null;
+             if (match.nonStrikerId === targetOutId) match.nonStrikerId = null;
          }
 
          if ((runs === 1 || runs === 3) && match.strikerId && match.nonStrikerId && !isWicket) {
@@ -395,14 +548,16 @@ export const useAppStore = create(
              match.currentBowlerId = (match.currentBowlerId === match.bowler1Id) ? match.bowler2Id : match.bowler1Id;
          }
 
-         if (inning.balls >= match.config.totalBalls || inning.wickets >= 10) { 
+         if (inning.balls >= match.config.totalBalls) { 
              match.inningEnded = true;
              if (match.currentInning === 1) match.matchEnded = true;
          }
-         
-         if (match.currentInning === 1 && inning.runs > match.innings[0].runs) {
-             match.matchEnded = true;
-             match.inningEnded = true;
+
+         if (match.currentInning === 1 && !match.matchEnded && !match.targetAchieved) {
+             const target = match.innings[0].runs + 1;
+             if (inning.runs >= target) {
+                 match.targetAchieved = true;
+             }
          }
 
          inning.battingState = bs;
@@ -416,6 +571,11 @@ export const useAppStore = create(
          };
       }),
 
+      dismissTargetPopup: () => set((state) => {
+          if (!state.activeMatch) return state;
+          return { activeMatch: { ...state.activeMatch, targetAchieved: false } };
+      }),
+
       calculateMatchStats: (matchInfo) => {
          const points = {};
          const processInning = (inning) => {
@@ -423,7 +583,9 @@ export const useAppStore = create(
                  if (stats.balls > 0 || stats.runs > 0 || stats.status !== 'yet_to_bat') {
                      if (!points[pid]) points[pid] = { id: pid, runsScored: 0, runsGiven: 0, wicketsTaken: 0, fieldingPoints: 0, totalPoints: 0, matchCount: 0 };
                      points[pid].runsScored += stats.runs;
-                     points[pid].totalPoints += stats.runs;
+                     // Safe math for older matches that might not have fours/sixes
+                     const bPoints = (stats.runs || 0) + ((stats.fours || 0) * 1) + ((stats.sixes || 0) * 3);
+                     points[pid].totalPoints += bPoints;
                  }
              });
              Object.entries(inning.bowlingState || {}).forEach(([pid, stats]) => {
@@ -431,14 +593,17 @@ export const useAppStore = create(
                      if (!points[pid]) points[pid] = { id: pid, runsScored: 0, runsGiven: 0, wicketsTaken: 0, fieldingPoints: 0, totalPoints: 0, matchCount: 0 };
                      points[pid].runsGiven += stats.runsGiven;
                      points[pid].wicketsTaken += stats.wickets;
-                     points[pid].totalPoints += (stats.wickets * 20) - stats.runsGiven;
+                     // 15 per wicket (removed subtraction of runsGiven)
+                     points[pid].totalPoints += (stats.wickets * 15);
                  }
              });
              (inning.ballLog || []).forEach(ball => {
                  if (ball.isWicket && ball.fielderId) {
                      if (!points[ball.fielderId]) points[ball.fielderId] = { id: ball.fielderId, runsScored: 0, runsGiven: 0, wicketsTaken: 0, fieldingPoints: 0, totalPoints: 0, matchCount: 0 };
-                     points[ball.fielderId].fieldingPoints += 10;
-                     points[ball.fielderId].totalPoints += 10;
+                     // 5 for catches/stumps, 10 for runouts (as per "higher points")
+                     const fPts = (ball.wicketType === 'runout') ? 10 : 5;
+                     points[ball.fielderId].fieldingPoints += fPts;
+                     points[ball.fielderId].totalPoints += fPts;
                  }
              });
          };
