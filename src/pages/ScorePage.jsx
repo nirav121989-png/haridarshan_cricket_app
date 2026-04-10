@@ -1,27 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store';
-import { ArrowLeft, RefreshCw, BarChart2, Users, Clock, Undo2, Trophy, User, Settings as SettingsIcon, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, RefreshCw, BarChart2, Users, Clock, Undo2, Trophy, User, Settings as SettingsIcon, Eye, EyeOff, Search, X } from 'lucide-react';
 
 export default function ScorePage() {
   const navigate = useNavigate();
   const { 
     activeMatch, players, weeklyTeams, undoStack,
-    endActiveMatch, restartMatch, startMatch, swapStrike, swapBowler, setActivePlayers, startNextInning, addScore, undoLastBall, retireBatsman, endCurrentInning, declareMatchOutcome, dismissTargetPopup 
+    endActiveMatch, restartMatch, startMatch, swapStrike, swapBowler, setActivePlayers, startNextInning, 
+    addScore, undoLastBall, retireBatsman, endCurrentInning, declareMatchOutcome, dismissTargetPopup,
+    addPlayer, addPlayerToTeamMidMatch, removePlayerFromTeamMidMatch
   } = useAppStore();
   
   const [showSelectModal, setShowSelectModal] = useState(null); 
   const [showWicketModal, setShowWicketModal] = useState(false);
-  const [wicketDetails, setWicketDetails] = useState({ type: null, step: 'type' });
+  const [wicketDetails, setWicketDetails] = useState({ step: 'type', type: null, outId: null, fielderId: null, runsCompleted: 0 });
   const [showPastSpells, setShowPastSpells] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
   const [showDeclareModal, setShowDeclareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showSpellHistory, setShowSpellHistory] = useState(false);
+  const [newPlayerName, setNewPlayerName] = useState('');
+  const [selectorView, setSelectorView] = useState('list'); // list, squads, search
+  const [filterText, setFilterText] = useState('');
+  const [isEditingConfig, setIsEditingConfig] = useState(false);
+  const [tempBalls, setTempBalls] = useState(0); 
+  const [showExtraModal, setShowExtraModal] = useState(null);
 
   useEffect(() => {
     if (!activeMatch) navigate('/');
   }, [activeMatch, navigate]);
+
+  useEffect(() => {
+     if (activeMatch?.config?.totalBalls !== undefined) {
+         setTempBalls(activeMatch.config.totalBalls);
+     }
+  }, [activeMatch?.config?.totalBalls]);
 
   if (!activeMatch || !activeMatch.innings) return <div className="p-10 text-center">Loading match data...</div>;
 
@@ -35,11 +49,6 @@ export default function ScorePage() {
   
   const battingTeam = weeklyTeams?.[battingTeamKey] || { name: 'Batting Team', playerIds: [] };
   const bowlingTeam = weeklyTeams?.[bowlingTeamKey] || { name: 'Bowling Team', playerIds: [] };
-
-  const [newPlayerName, setNewPlayerName] = useState('');
-  const [selectorView, setSelectorView] = useState('list'); // list, squads, search
-  
-  const [filterText, setFilterText] = useState('');
   
   const handleSelect = (playerId) => {
       setFilterText(''); // reset search
@@ -88,27 +97,43 @@ export default function ScorePage() {
 
   const hasPlayersAssigned = striker && nonStriker && bowler1 && bowler2;
 
-  const [isEditingConfig, setIsEditingConfig] = useState(false);
-  const [tempBalls, setTempBalls] = useState(config.totalBalls);
-  const [showExtraModal, setShowExtraModal] = useState(null); // 'wide' or 'noBall' or null
-  
+
   const handleRun = (runs) => {
       addScore({ runs, isWide: false, isNoBall: false, isWicket: false });
   };
   
-  const processWicket = (type, fielderId = null, outPlayerId = null) => {
-      // If it's a runout and we don't have an outPlayerId yet, we need to ask who is out
-      if (type === 'runout' && !outPlayerId) {
-          setWicketDetails({ step: 'batsman', type, fielderId });
-          return;
-      }
+  const handleWicketClick = () => {
+      setWicketDetails({ step: 'type', type: null, outId: null, fielderId: null, runsCompleted: 0 });
+      setShowWicketModal(true);
+  };
 
-      addScore({ runs: 0, isWide: false, isNoBall: false, isWicket: true, wicketType: type, fielderId, outPlayerId });
+  const handleWicketTypeSelect = (type) => {
+      if (type === 'runout') {
+          setWicketDetails({ ...wicketDetails, type, step: 'pick_out' });
+      } else {
+          setWicketDetails({ ...wicketDetails, type, step: 'fielder' });
+      }
+  };
+
+  const finalizeWicket = (fielderId = null) => {
+      addScore({ runs: 0, isWide: false, isNoBall: false, isWicket: true, wicketType: wicketDetails.type, fielderId });
       setShowWicketModal(false);
-      
-      // Fix: Only open selector for the slot that was actually emptied
-      const isNonStrikerOut = outPlayerId && outPlayerId === activeMatch.nonStrikerId;
-      setShowSelectModal(isNonStrikerOut ? 'nonStriker' : 'striker'); 
+      setShowSelectModal('striker'); // Simple default
+  };
+
+  const finalizeRunout = (fId = null) => {
+      addScore({ 
+          runs: wicketDetails.runsCompleted, 
+          isWide: false, 
+          isNoBall: false, 
+          isWicket: true, 
+          wicketType: 'runout', 
+          fielderId: fId,
+          outPlayerId: wicketDetails.outId 
+      });
+      setShowWicketModal(false);
+      // Logic for new batsman picker
+      setShowSelectModal(wicketDetails.outId === activeMatch.nonStrikerId ? 'nonStriker' : 'striker');
   };
   
   const handleExtraSubmission = (runs) => {
@@ -282,7 +307,12 @@ export default function ScorePage() {
                                                   <div className="flex-shrink-0 flex items-center justify-center shadow-md" style={{ width: '42px', height: '42px', borderRadius: '50%', background: bgColor, color, fontSize: '0.65rem', fontWeight: '900', border: '1.5px solid rgba(255,255,255,0.05)', boxSizing: 'border-box' }}>
                                                       {label}
                                                   </div>
-                                                  <span style={{ fontSize: '0.6rem', fontWeight: '900', color: 'var(--primary)', opacity: 0.8 }}>B{ballNum}</span>
+                                                  <div className="flex-col items-center" style={{ minWidth: '42px' }}>
+                                                      <span style={{ fontSize: '0.45rem', fontWeight: '950', color: 'var(--primary)', opacity: 0.9 }}>B{ballNum}</span>
+                                                      <span style={{ fontSize: '0.45rem', fontWeight: '700', color: 'var(--text-muted)', textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', width: '100%' }}>
+                                                          {getPlayerName(ball.bowlerId).split(' ')[0].toUpperCase()}
+                                                      </span>
+                                                  </div>
                                               </div>
                                           );
                                       });
@@ -396,15 +426,43 @@ export default function ScorePage() {
                   </button>
               </div>
           </div>
+          
+          {/* Validation Guard for Scoring Pad */}
+          {(() => {
+              const missing = [];
+              if (!activeMatch.strikerId) missing.push("STRIKER");
+              if (!activeMatch.nonStrikerId) missing.push("NON-STR");
+              if (!activeMatch.bowler1Id) missing.push("BOWL 1");
+              if (!activeMatch.bowler2Id) missing.push("BOWL 2");
+              const canScore = missing.length === 0;
 
-          <div className="scoring-grid">
-              {[0, 1, 2, 3, 4, 6].map(val => (
-                  <button key={val} className="score-num-btn" onClick={() => handleRun(val)}>{val}</button>
-              ))}
-              <button className="score-num-btn" style={{ fontSize: '11px', color: 'var(--primary)', background: 'var(--primary-glow)' }} onClick={() => setShowExtraModal('wide')}>WIDE</button>
-              <button className="score-num-btn" style={{ fontSize: '11px', color: 'var(--primary)', background: 'var(--primary-glow)' }} onClick={() => setShowExtraModal('noBall')}>NB</button>
-              <button className="score-num-btn" style={{ fontSize: '11px', color: 'var(--danger)', background: 'var(--danger-glow)', borderColor: 'var(--danger)' }} onClick={() => { setWicketDetails({ step: 'type' }); setShowWicketModal(true); }}>OUT</button>
-          </div>
+              return (
+                  <div style={{ position: 'relative' }}>
+                      {!canScore && (
+                          <div style={{ 
+                              position: 'absolute', inset: 0, zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              background: 'rgba(0,0,0,0.1)', borderRadius: '12px', pointerEvents: 'none'
+                          }}>
+                              <div style={{ 
+                                  background: 'var(--danger)', color: 'white', padding: '6px 16px', borderRadius: '20px', 
+                                  fontSize: '0.7rem', fontWeight: '900', boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
+                                  textTransform: 'uppercase', animation: 'pulse 2s infinite'
+                              }}>
+                                  Select {missing.join(" & ")}
+                              </div>
+                          </div>
+                      )}
+                      <div className="scoring-grid" style={{ opacity: canScore ? 1 : 0.2, pointerEvents: canScore ? 'auto' : 'none' }}>
+                          {[0, 1, 2, 3, 4, 6].map(val => (
+                              <button key={val} className="score-num-btn" onClick={() => handleRun(val)}>{val}</button>
+                          ))}
+                          <button className="score-num-btn" style={{ fontSize: '11px', color: 'var(--primary)', background: 'var(--primary-glow)' }} onClick={() => setShowExtraModal('wide')}>WIDE</button>
+                          <button className="score-num-btn" style={{ fontSize: '11px', color: 'var(--primary)', background: 'var(--primary-glow)' }} onClick={() => setShowExtraModal('noBall')}>NB</button>
+                          <button className="score-num-btn" style={{ fontSize: '11px', color: 'var(--danger)', background: 'var(--danger-glow)', borderColor: 'var(--danger)' }} onClick={handleWicketClick}>OUT</button>
+                      </div>
+                  </div>
+              );
+          })()}
       </div>
 
       {/* EXTRA RUNS MODAL */}
@@ -437,7 +495,18 @@ export default function ScorePage() {
                 {activeMatch.matchEnded ? (
                     <div className="flex-col gap-4">
                         <h2 style={{ color: 'var(--secondary)', fontSize: '1.5rem', fontWeight: '900' }}>
-                            {activeMatch.innings[1].runs <= activeMatch.innings[0].runs ? 'TIED MATCH!' : `${battingTeam.name.toUpperCase()} WIN!`}
+                            {(() => {
+                                const r1 = activeMatch.innings[0].runs;
+                                const r2 = activeMatch.innings[1]?.runs || 0;
+                                const t1Key = activeMatch.innings[0].team;
+                                const t2Key = activeMatch.innings[1]?.team;
+                                const t1Name = (t1Key === 'teamA' ? activeMatch.teamNames.teamA : activeMatch.teamNames.teamB)?.toUpperCase();
+                                const t2Name = (t2Key === 'teamA' ? activeMatch.teamNames.teamA : activeMatch.teamNames.teamB)?.toUpperCase();
+                                
+                                if (r1 > r2) return `${t1Name} WIN!`;
+                                if (r2 > r1) return `${t2Name} WIN!`;
+                                return 'TIED MATCH!';
+                            })()}
                         </h2>
                         <button className="btn btn-primary w-full p-4" style={{ fontWeight: '800' }} onClick={() => { endActiveMatch(); navigate('/'); }}>FINISH & RECAP</button>
                     </div>
@@ -467,8 +536,16 @@ export default function ScorePage() {
                         <div className="flex gap-2 mb-3">
                              <input className="input" style={{ flex: '0 0 70%', background: 'var(--surface-muted)', border: '1px solid var(--border-color)', fontSize: '0.85rem' }} 
                                 placeholder="🔍 Filter players..." value={filterText} onChange={e => setFilterText(e.target.value)} />
-                             <button className="btn btn-primary flex-1 p-3" style={{ fontSize: '0.65rem', fontWeight: '900' }} onClick={() => setSelectorView('squads')}>+ SQUADS</button>
+                             <button className="btn btn-primary flex-1 p-3" style={{ fontSize: '0.65rem', fontWeight: '900' }} onClick={() => setSelectorView('edit')}>+ SQUADS</button>
                         </div>
+
+                        {(showSelectModal.includes('bowler') ? bowlingTeam : battingTeam).playerIds.length === 0 && !filterText && (
+                            <div className="flex-col items-center justify-center p-10 opacity-60">
+                                <Users size={40} className="mb-2" />
+                                <p style={{ fontSize: '0.8rem', fontWeight: '800' }}>NO PLAYERS IN THIS SQUAD</p>
+                                <button className="btn btn-primary btn-sm mt-3" onClick={() => setSelectorView('edit')}>MANAGE SQUAD</button>
+                            </div>
+                        )}
 
                         {(showSelectModal.includes('bowler') ? bowlingTeam : battingTeam).playerIds.filter(pid => {
                             const p = players.find(x => x.id === pid);
@@ -521,7 +598,7 @@ export default function ScorePage() {
                   ) : (
                     <div className="flex-col gap-4" style={{ overflowY: 'auto', flex: 1, paddingBottom: '20px' }}>
                          <div className="flex-col gap-2 p-3 bg-surface-muted" style={{ borderRadius: '12px' }}>
-                             <label className="label" style={{ fontSize: '0.65rem' }}>QUICK ADD NEW PLAYER</label>
+                             <label className="label" style={{ fontSize: '0.65rem' }}>QUICK ADD NEW PLAYER TO {showSelectModal.includes('bowler') ? bowlingTeam.name : battingTeam.name}</label>
                              <div className="flex gap-2">
                                 <input className="input" placeholder="New Player Name" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} />
                                 <button className="btn btn-primary" onClick={handleCreateAndAdd}>ADD</button>
@@ -531,26 +608,47 @@ export default function ScorePage() {
                          <div className="flex-col gap-2">
                              <h4 style={{ fontSize: '0.75rem', fontWeight: '800', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px' }}>PICK FROM PLAYER BANK</h4>
                              <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
-                                 {players.filter(p => !battingTeam.playerIds.includes(p.id) && !bowlingTeam.playerIds.includes(p.id)).map(p => (
-                                     <button key={p.id} className="btn btn-surface p-3" style={{ fontSize: '0.75rem', fontWeight: '700' }} onClick={() => {
-                                         addPlayerToTeamMidMatch(showSelectModal.includes('bowler') ? bowlingTeamKey : battingTeamKey, p.id);
-                                         setSelectorView('list');
-                                     }}>+ {p.name}</button>
-                                 ))}
+                                 {players.filter(p => !battingTeam.playerIds.includes(p.id) && !bowlingTeam.playerIds.includes(p.id)).length > 0 ? (
+                                    players.filter(p => !battingTeam.playerIds.includes(p.id) && !bowlingTeam.playerIds.includes(p.id)).map(p => (
+                                        <button key={p.id} className="btn btn-surface p-3" style={{ fontSize: '0.75rem', fontWeight: '700' }} onClick={() => {
+                                            setConfirmAction({
+                                                msg: `Add ${p.name.toUpperCase()} to ${showSelectModal.includes('bowler') ? bowlingTeam.name.toUpperCase() : battingTeam.name.toUpperCase()}?`,
+                                                act: () => {
+                                                    addPlayerToTeamMidMatch(showSelectModal.includes('bowler') ? bowlingTeamKey : battingTeamKey, p.id);
+                                                }
+                                            });
+                                        }}>+ {p.name}</button>
+                                    ))
+                                 ) : (
+                                     <p style={{ gridColumn: '1 / -1', textAlign: 'center', py: 4, opacity: 0.5, fontSize: '0.7rem', fontWeight: '700' }}>(BANK IS EMPTY - ALL PLAYERS ARE IN SQUADS)</p>
+                                 )}
                              </div>
                          </div>
                          
-                         <div className="flex-col gap-2 mt-4">
-                             <h4 style={{ fontSize: '0.75rem', fontWeight: '800', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px', color: 'var(--danger)' }}>REMOVE FROM SQUAD</h4>
-                             <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
-                                 {(showSelectModal.includes('bowler') ? bowlingTeam : battingTeam).playerIds.map(pid => {
-                                     const p = players.find(x => x.id === pid);
-                                     return (
-                                     <button key={pid} className="btn btn-surface p-3" style={{ fontSize: '0.7rem', color: 'var(--danger)' }} onClick={() => {
-                                         removePlayerFromTeamMidMatch(showSelectModal.includes('bowler') ? bowlingTeamKey : battingTeamKey, pid);
-                                     }}>- {p?.name}</button>
-                                 )})}
-                             </div>
+                         <div className="flex-col gap-4 mt-4">
+                             <h4 style={{ fontSize: '0.75rem', fontWeight: '800', borderBottom: '2px solid var(--danger)', paddingBottom: '4px', color: 'var(--danger)' }}>MOVE / REMOVE FROM CURRENT GAME</h4>
+                             
+                             {['teamA', 'teamB'].map(tk => (
+                                 <div key={tk} className="flex-col gap-2 p-3 rounded-lg border border-white/5 bg-black/10">
+                                     <h5 style={{ fontSize: '0.6rem', fontWeight: '900', color: 'var(--text-muted)' }}>{weeklyTeams[tk].name.toUpperCase()} SQUAD</h5>
+                                     <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                                         {weeklyTeams[tk].playerIds.map(pid => {
+                                             const p = players.find(x => x.id === pid);
+                                             return (
+                                                 <button key={pid} className="btn btn-surface p-2 justify-between" style={{ fontSize: '0.65rem' }} onClick={() => {
+                                                     setConfirmAction({
+                                                         msg: `Remove ${p?.name.toUpperCase()} from ${weeklyTeams[tk].name.toUpperCase()}?`,
+                                                         act: () => removePlayerFromTeamMidMatch(tk, pid)
+                                                     });
+                                                 }}>
+                                                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{p?.name.toUpperCase()}</span>
+                                                     <X size={10} color="var(--danger)" />
+                                                 </button>
+                                             );
+                                         })}
+                                     </div>
+                                 </div>
+                             ))}
                          </div>
 
                          <button className="btn btn-surface w-full p-4 mt-6" onClick={() => setSelectorView('list')}>BACK TO SELECTOR</button>
@@ -561,54 +659,65 @@ export default function ScorePage() {
       )}
 
       {showWicketModal && (
-          <div className="glass flex items-end" style={{ position: 'fixed', inset: 0, zIndex: 220, background: 'rgba(0,0,0,0.5)' }}>
-              <div className="card w-full flex-col" style={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0, maxHeight: '85dvh', paddingBottom: '32px' }}>
-                  <div className="flex justify-between items-center mb-4" style={{ flexShrink: 0 }}>
-                      <h3 style={{ fontWeight: '800', textTransform: 'uppercase' }}>
-                           {wicketDetails.step === 'type' ? 'SELECT WICKET TYPE' : `${wicketDetails.type} BY?`}
-                      </h3>
-                      <button className="btn btn-surface btn-sm" onClick={() => setShowWicketModal(false)}>CANCEL</button>
+          <div className="glass flex items-end" style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.8)' }}>
+              <div className="card w-full flex-col gap-6" style={{ background: 'var(--surface)', borderBottomLeftRadius: 0, borderBottomRightRadius: 0, paddingBottom: '40px' }}>
+                  <div className="flex justify-between items-center">
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: '900', color: 'var(--danger)' }}>
+                        {wicketDetails.step === 'type' && 'WICKET TYPE'}
+                        {wicketDetails.step === 'fielder' && 'SELECT FIELDER'}
+                        {wicketDetails.step === 'pick_out' && 'WHO IS OUT?'}
+                        {wicketDetails.step === 'run_runs' && 'RUNS COMPLETED?'}
+                    </h3>
+                    <button className="btn btn-surface btn-sm" onClick={() => setShowWicketModal(false)}>CANCEL</button>
                   </div>
-                  <div className="flex-col gap-2" style={{ overflowY: 'auto', flex: 1, paddingBottom: '20px' }}>
-                    {wicketDetails.step === 'type' ? (
-                        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                            {['bowled', 'caught', 'runout', 'stumped'].map(t => (
-                                <button key={t} className="btn btn-surface w-full p-4" style={{ fontSize: '1rem', fontWeight: '800' }} onClick={() => t === 'bowled' ? processWicket(t) : setWicketDetails({ step: 'fielder', type: t })}>{t.toUpperCase()}</button>
+
+                  {wicketDetails.step === 'type' && (
+                    <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                        {['bowled', 'caught', 'runout', 'stumped', 'lbw', 'hit_wicket'].map(t => (
+                            <button key={t} className="btn btn-surface p-4" style={{ fontWeight: '800', textTransform: 'uppercase', fontSize: '0.8rem' }} onClick={() => handleWicketTypeSelect(t)}>{t.replace('_',' ').toUpperCase()}</button>
+                        ))}
+                    </div>
+                  )}
+
+                  {wicketDetails.step === 'pick_out' && (
+                    <div className="flex-col gap-3">
+                        <button className="btn btn-surface p-5" style={{ fontSize: '1rem', fontWeight: '900' }} 
+                            onClick={() => setWicketDetails({ ...wicketDetails, outId: activeMatch.strikerId, step: 'run_runs' })}>
+                            STRIKER: {getPlayerName(activeMatch.strikerId).toUpperCase()}
+                        </button>
+                        <button className="btn btn-surface p-5" style={{ fontSize: '1rem', fontWeight: '900' }} 
+                            onClick={() => setWicketDetails({ ...wicketDetails, outId: activeMatch.nonStrikerId, step: 'run_runs' })}>
+                            NON-STR: {getPlayerName(activeMatch.nonStrikerId).toUpperCase()}
+                        </button>
+                    </div>
+                  )}
+
+                  {wicketDetails.step === 'run_runs' && (
+                    <div className="flex-col gap-4">
+                        <div className="scoring-grid">
+                            {[0, 1, 2, 3, 4].map(r => (
+                                <button key={r} className="score-num-btn" style={{ padding: '20px' }} 
+                                    onClick={() => setWicketDetails({ ...wicketDetails, runsCompleted: r, step: 'fielder' })}>{r}</button>
                             ))}
-                            <button className="btn w-full p-4" style={{ background: 'var(--surface-muted)', fontWeight: '800', border: '1px solid var(--border-color)', color: 'var(--text-main)', fontSize: '0.85rem' }} onClick={() => { retireBatsman(activeMatch.strikerId, false); setShowWicketModal(false); }}>RETIRE (HURT)</button>
-                            <button className="btn w-full p-4" style={{ background: 'var(--danger-glow)', fontWeight: '800', border: '1px solid var(--danger)', color: 'var(--danger)', fontSize: '0.85rem' }} onClick={() => { retireBatsman(activeMatch.strikerId, true); setShowWicketModal(false); }}>RETIRE (OUT)</button>
                         </div>
-                    ) : wicketDetails.step === 'fielder' ? (
-                        bowlingTeam.playerIds.map(pid => {
-                            const p = players.find(x => x.id === pid);
-                            return (
-                                <button key={pid} className="btn btn-surface w-full p-4 gap-3" style={{ fontSize: '1rem', fontWeight: '800', justifyContent: 'flex-start' }} onClick={() => processWicket(wicketDetails.type, pid)}>
-                                    {p?.image ? (
-                                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-                                            <img src={p.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                        </div>
-                                    ) : <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--surface-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><User size={20} /></div>}
-                                    <span style={{ textAlign: 'left' }}>{p?.name.toUpperCase()}</span>
+                        <p style={{ textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-muted)' }}>How many runs were completed before the runout?</p>
+                    </div>
+                  )}
+
+                  {wicketDetails.step === 'fielder' && (
+                    <div className="flex-col gap-2" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                        <button className="btn btn-primary p-4 mb-2" style={{ fontWeight: '900' }} onClick={() => wicketDetails.type === 'runout' ? finalizeRunout(null) : finalizeWicket(null)}>
+                            {wicketDetails.type === 'runout' ? 'DIRECT HIT / NO FIELDER' : 'BOWLED / NO FIELDER'}
+                        </button>
+                        <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                            {bowlingTeam.playerIds.map(pid => (
+                                <button key={pid} className="btn btn-surface p-3" style={{ fontSize: '0.75rem', fontWeight: '800' }} onClick={() => wicketDetails.type === 'runout' ? finalizeRunout(pid) : finalizeWicket(pid)}>
+                                    {getPlayerName(pid).toUpperCase()}
                                 </button>
-                            )
-                        })
-                    ) : (
-                        <div className="flex-col gap-3">
-                            <p style={{ textAlign: 'center', fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-muted)' }}>WHICH BATSMAN IS OUT?</p>
-                            {[
-                                { id: activeMatch.strikerId, label: 'STRIKER' },
-                                { id: activeMatch.nonStrikerId, label: 'NON-STRIKER' }
-                            ].map(b => {
-                                const p = players.find(x => x.id === b.id);
-                                return (
-                                    <button key={b.id} className="btn btn-surface w-full p-5" style={{ fontSize: '1.2rem', fontWeight: '900' }} onClick={() => processWicket(wicketDetails.type, wicketDetails.fielderId, b.id)}>
-                                        {p?.name.toUpperCase()} ({b.label})
-                                    </button>
-                                )
-                            })}
+                            ))}
                         </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
               </div>
           </div>
       )}
